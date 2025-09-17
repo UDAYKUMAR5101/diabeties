@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 class Patient(models.Model):
     name = models.CharField(max_length=100)
@@ -8,11 +9,9 @@ class Patient(models.Model):
 
     def __str__(self):
         return self.name
-from django.db import models
-from django.contrib.auth.models import User
 
 class Symptoms(models.Model):
-    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)  # allow anonymous
     Age = models.IntegerField()
     Gender = models.CharField(max_length=10)
     Polyuria = models.CharField(max_length=10)
@@ -29,9 +28,9 @@ class Symptoms(models.Model):
     muscle_stiffness = models.CharField(max_length=10)
     Alopecia = models.CharField(max_length=10)
     Obesity = models.CharField(max_length=10)
+    prediction = models.CharField(max_length=32, null=True, blank=True)   # ADD
+    risk_level = models.CharField(max_length=16, null=True, blank=True)   # ADD
     created_at = models.DateTimeField(auto_now_add=True)
-    prediction = models.CharField(max_length=20, null=True, blank=True)
-    risk_level = models.CharField(max_length=10, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.created_at}"
+        return f"{self.user.username if self.user else 'anonymous'} - {self.created_at}"

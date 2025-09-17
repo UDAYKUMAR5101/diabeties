@@ -44,59 +44,72 @@ class SymptomsView(APIView):
     def post(self, request):
         serializer = SymptomsSerializer(data=request.data)
         if serializer.is_valid():
-            # Always save record; attach user if authenticated else store as anonymous
-            if request.user.is_authenticated:
-                instance = serializer.save(user=request.user)
-            else:
-                instance = serializer.save()
-            
-            # Prepare input for ML model
-            features = [
-                'Age', 'Gender', 'Polyuria', 'Polydipsia', 'sudden_weight_loss', 'weakness',
-                'Polyphagia', 'Genital_thrush', 'visual_blurring', 'Itching', 'Irritability',
-                'delayed_healing', 'partial_paresis', 'muscle_stiffness', 'Alopecia', 'Obesity'
-            ]
-            
-            input_data = pd.DataFrame([serializer.validated_data])
+            try:
+                # Always save record; attach user if authenticated else store as anonymous
+                if request.user.is_authenticated:
+                    instance = serializer.save(user=request.user)
+                else:
+                    instance = serializer.save()
+                
+                # Prepare input for ML model
+                input_data = pd.DataFrame([serializer.validated_data])
 
-            # Rename columns to match training feature names (spaces instead of underscores)
-            rename_map = {
-                'sudden_weight_loss': 'sudden weight loss',
-                'Genital_thrush': 'Genital thrush',
-                'visual_blurring': 'visual blurring',
-                'delayed_healing': 'delayed healing',
-                'partial_paresis': 'partial paresis',
-                'muscle_stiffness': 'muscle stiffness',
-            }
-            input_data.rename(columns=rename_map, inplace=True)
+                # Rename columns to match training feature names (spaces instead of underscores)
+                rename_map = {
+                    'sudden_weight_loss': 'sudden weight loss',
+                    'Genital_thrush': 'Genital thrush',
+                    'visual_blurring': 'visual blurring',
+                    'delayed_healing': 'delayed healing',
+                    'partial_paresis': 'partial paresis',
+                    'muscle_stiffness': 'muscle stiffness',
+                }
+                input_data.rename(columns=rename_map, inplace=True)
 
-            # Align columns order to model expectations if available
-            if hasattr(model, 'feature_names_in_'):
-                expected_cols = list(model.feature_names_in_)
-                input_data = input_data.reindex(columns=expected_cols)
-            
-            # Apply label encoding to categorical columns
-            for col, le in label_encoders.items():
-                if col in input_data.columns:
-                    input_data[col] = le.transform(input_data[col])
-            
-            # Predict
-            pred_class = model.predict(input_data)[0]
-            pred_prob = model.predict_proba(input_data)[0].max()
-            risk_level = f"{pred_prob*100:.2f}%"
-            predicted_label = target_encoder.inverse_transform([pred_class])[0]
+                # Align columns order to model expectations if available
+                if hasattr(model, 'feature_names_in_'):
+                    expected_cols = list(model.feature_names_in_)
+                    input_data = input_data.reindex(columns=expected_cols)
+                
+                # Apply label encoding to categorical columns with error handling
+                for col, le in label_encoders.items():
+                    if col in input_data.columns:
+                        try:
+                            input_data[col] = le.transform(input_data[col])
+                        except ValueError as e:
+                            return Response(
+                                {"error": f"Invalid value for {col}: {str(e)}"}, 
+                                status=status.HTTP_400_BAD_REQUEST
+                            )
+                
+                # Predict with error handling
+                try:
+                    pred_class = model.predict(input_data)[0]
+                    pred_prob = model.predict_proba(input_data)[0].max()
+                    risk_level = f"{pred_prob*100:.2f}%"
+                    predicted_label = target_encoder.inverse_transform([pred_class])[0]
+                except Exception as e:
+                    return Response(
+                        {"error": f"Prediction failed: {str(e)}"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
-            # Persist prediction on the saved instance
-            instance.prediction = predicted_label
-            instance.risk_level = risk_level
-            instance.save(update_fields=['prediction', 'risk_level'])
+                # Persist prediction on the saved instance
+                instance.prediction = predicted_label
+                instance.risk_level = risk_level
+                instance.save(update_fields=['prediction', 'risk_level'])
 
-            result = {
-                "prediction": predicted_label,
-                "risk_level": risk_level
-            }
+                result = {
+                    "prediction": predicted_label,
+                    "risk_level": risk_level
+                }
 
-            return Response(result, status=status.HTTP_201_CREATED)
+                return Response(result, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                return Response(
+                    {"error": f"Failed to process request: {str(e)}"}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

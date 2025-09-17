@@ -64,6 +64,29 @@ joblib.dump(label_encoders, 'app/label_encoders.pkl')
 joblib.dump(target_encoder, 'app/target_encoder.pkl')
 
 print("✅ Gradient Boosting model trained and saved successfully.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 '''
 -------------------------------------------------------------------------------
 
