@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+*.pyo
+*.pyd
+*.so
+
+# Virtualenv
+venv/
+.env
+.env.*
+
+# Django
+*.log
+media/
+staticfiles/
+static/
+local_settings.py
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations cache
+**/migrations/**/__pycache__/
+
+# Project-specific large files
+app/models/*.pkl
+app/dataset/*.csv
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Coverage
+.coverage
+htmlcov/
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.python-version
