@@ -14,6 +14,42 @@ def create_patient(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(["GET"])
+def get_patient_details(request):
+    """
+    Validate patient login based on name and phone number.
+    Expected query parameters: ?name=patient_name&phone=phone_number
+    Returns login success/failure message.
+    """
+    name = request.query_params.get('name')  # Changed from request.data.get('name')
+    phone = request.query_params.get('phone')  # Changed from request.data.get('phone')
+    
+    # Validate required fields
+    if not name or not phone:
+        return Response(
+            {"message": "Both 'name' and 'phone' are required as query parameters"}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Check if patient exists with given name and phone
+        patient = Patient.objects.get(name=name, phone=phone)
+        return Response(
+            {"message": "Login successfully"}, 
+            status=status.HTTP_200_OK
+        )
+    
+    except Patient.DoesNotExist:
+        return Response(
+            {"message": "Not valid details"}, 
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    except Exception as e:
+        return Response(
+            {"message": f"An error occurred: {str(e)}"}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
