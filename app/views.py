@@ -64,15 +64,13 @@ from .serializers import SymptomsSerializer
 # Get base directory of the app
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Construct the full path to the model and encoders
+# Construct the full path to the model and numeric imputer
 model_path = os.path.join(BASE_DIR, 'models', 'diabetes_gb_model.pkl')
-label_encoders_path = os.path.join(BASE_DIR, 'models', 'label_encoders.pkl')
-target_encoder_path = os.path.join(BASE_DIR, 'models', 'target_encoder.pkl')
+num_imputer_path = os.path.join(BASE_DIR, 'models', 'num_imputer.pkl')
 
-# Load the model, label encoders, and target encoder
+# Load the model and numeric imputer
 model = joblib.load(model_path)
-label_encoders = joblib.load(label_encoders_path)
-target_encoder = joblib.load(target_encoder_path)
+num_imputer = joblib.load(num_imputer_path)
 
 class SymptomsView(APIView):
     permission_classes = [AllowAny]
@@ -87,42 +85,32 @@ class SymptomsView(APIView):
                 else:
                     instance = serializer.save()
                 
-                # Prepare input for ML model
-                input_data = pd.DataFrame([serializer.validated_data])
+                # Prepare input for numeric model features only
+                input_data = pd.DataFrame([{
+                    'Pregnancies': serializer.validated_data.get('Pregnancies'),
+                    'Glucose': serializer.validated_data.get('Glucose'),
+                    'BloodPressure': serializer.validated_data.get('BloodPressure'),
+                    'SkinThickness': serializer.validated_data.get('SkinThickness'),
+                    'Insulin': serializer.validated_data.get('Insulin'),
+                    'BMI': serializer.validated_data.get('BMI'),
+                    'DiabetesPedigreeFunction': serializer.validated_data.get('DiabetesPedigreeFunction'),
+                    'Age': serializer.validated_data.get('Age'),
+                }])
 
-                # Rename columns to match training feature names (spaces instead of underscores)
-                rename_map = {
-                    'sudden_weight_loss': 'sudden weight loss',
-                    'Genital_thrush': 'Genital thrush',
-                    'visual_blurring': 'visual blurring',
-                    'delayed_healing': 'delayed healing',
-                    'partial_paresis': 'partial paresis',
-                    'muscle_stiffness': 'muscle stiffness',
-                }
-                input_data.rename(columns=rename_map, inplace=True)
+                # Ensure column order matches training
+                expected_cols = ['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 
+                                 'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age']
+                input_data = input_data.reindex(columns=expected_cols)
 
-                # Align columns order to model expectations if available
-                if hasattr(model, 'feature_names_in_'):
-                    expected_cols = list(model.feature_names_in_)
-                    input_data = input_data.reindex(columns=expected_cols)
-                
-                # Apply label encoding to categorical columns with error handling
-                for col, le in label_encoders.items():
-                    if col in input_data.columns:
-                        try:
-                            input_data[col] = le.transform(input_data[col])
-                        except ValueError as e:
-                            return Response(
-                                {"error": f"Invalid value for {col}: {str(e)}"}, 
-                                status=status.HTTP_400_BAD_REQUEST
-                            )
+                # Impute missing numeric values with the same imputer used in training
+                input_data_imputed = num_imputer.transform(input_data)
                 
                 # Predict with error handling
                 try:
-                    pred_class = model.predict(input_data)[0]
-                    pred_prob = model.predict_proba(input_data)[0].max()
+                    pred_class = model.predict(input_data_imputed)[0]
+                    pred_prob = model.predict_proba(input_data_imputed)[0].max()
                     risk_level = f"{pred_prob*100:.2f}%"
-                    predicted_label = target_encoder.inverse_transform([pred_class])[0]
+                    predicted_label = 'Diabetic' if pred_class == 1 else 'Non-Diabetic'
                 except Exception as e:
                     return Response(
                         {"error": f"Prediction failed: {str(e)}"}, 
